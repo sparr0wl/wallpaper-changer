@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dota-background-changer"
+version = "1.0.0"
+description = "Desktop WebM background packer and VPK browser for Dota 2"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+dota-background = "dota_background.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["dota_background*"]
