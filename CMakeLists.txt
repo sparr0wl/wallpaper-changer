@@ -29,7 +29,7 @@ set(CPACK_PACKAGE_FILE_NAME "wallpaper-changer-${WALLPAPER_RELEASE}-linux-x86_64
 set(CPACK_DEBIAN_PACKAGE_VERSION "7.41.0+trove.of.terror")
 set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "sparr0wl")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "python3 (>= 3.10), liblz4-1, ffmpeg, libqt6core6 (>= 6.4), libqt6gui6, libqt6network6, libqt6qml6, libqt6quick6, libqt6multimedia6, qt6-qpa-plugins, qt6-wayland, qml6-module-qtqml, qml6-module-qtqml-models, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-dialogs, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtmultimedia")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "python3 (>= 3.10), liblz4-1, ffmpeg, libqt6core6 (>= 6.4), libqt6gui6, libqt6network6, libqt6qml6, libqt6quick6, libqt6multimedia6, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav, qt6-qpa-plugins, qt6-wayland, qml6-module-qtqml, qml6-module-qtqml-models, qml6-module-qtquick, qml6-module-qtquick-window, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-dialogs, qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtmultimedia")
 set(CPACK_RPM_PACKAGE_VERSION "7.41f")
 set(CPACK_RPM_PACKAGE_RELEASE "1.trove_of_terror")
 set(CPACK_RPM_PACKAGE_ARCHITECTURE "x86_64")

@@ -56,7 +56,7 @@ class CoreTests(unittest.TestCase):
         package = self.build()
         target, backup = core.install(package, self.game.parent)
         self.assertIsNone(backup)
-        self.assertEqual(target, self.game / 'dota_123')
+        self.assertEqual(target, (self.game / 'dota_123').resolve())
         self.video.write_bytes(b'next video')
         second = self.build('second')
         _, backup = core.install(second, self.game)

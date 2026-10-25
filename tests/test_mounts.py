@@ -65,7 +65,7 @@ class MountedInstallationTests(unittest.TestCase):
         chinese.mkdir()
         (chinese / 'gameinfo.gi').write_text('official fixture')
         target, _ = mounts.install(self.package, self.game)
-        self.assertEqual(target.parent, chinese)
+        self.assertEqual(target.parent, chinese.resolve())
         self.assertEqual(mounts.language_status(self.game)['ui'], 'english')
         self.assertEqual(mounts.language_status(self.game)['audio'], 'schinese')
         self.assertTrue((self.folder / 'pak01_dir.vpk').is_file())

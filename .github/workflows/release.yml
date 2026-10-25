@@ -24,7 +24,7 @@ jobs:
       - name: Install build and runtime dependencies
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git cmake make g++ rpm python3 ffmpeg liblz4-1 qt6-base-dev qt6-declarative-dev qt6-multimedia-dev qt6-qpa-plugins qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs qml6-module-qtquick-templates qml6-module-qtqml-workerscript qml6-module-qtmultimedia libgl1-mesa-dri
+          apt-get install -y --no-install-recommends ca-certificates git cmake make g++ rpm python3 ffmpeg liblz4-1 qt6-base-dev qt6-declarative-dev qt6-multimedia-dev qt6-qpa-plugins qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs qml6-module-qtquick-templates qml6-module-qtqml-workerscript qml6-module-qtmultimedia libgl1-mesa-dri gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav
       - uses: actions/checkout@v4
       - name: Unit and integration tests
         run: python3 -m unittest discover -s tests -v

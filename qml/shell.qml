@@ -338,16 +338,16 @@ Item {
                                     Layout.fillWidth: true; Layout.preferredHeight: width * 0.5625; color: app.bg; radius: 6; clip: true
                                     Image { anchors.fill: parent; source: app.selected ? app.selected.preview_url : ""; fillMode: Image.PreserveAspectCrop; visible: !app.playing }
                                     VideoOutput { id: videoOutput; anchors.fill: parent; fillMode: VideoOutput.Stretch; visible: app.playing }
-                                    MediaPlayer {
-                                        id: player
-                                        source: app.selected ? app.selected.video_url : ""
-                                        videoOutput: videoOutput
-                                        loops: MediaPlayer.Infinite
-                                    }
-                                    Connections {
-                                        target: app
-                                        function onPlayingChanged() { if (app.playing) player.play(); else player.stop(); }
-                                        function onSelectedIdChanged() { player.stop(); }
+                                    Loader {
+                                        active: app.playing && !!app.selected
+                                        sourceComponent: Component {
+                                            MediaPlayer {
+                                                source: app.selected ? app.selected.video_url : ""
+                                                videoOutput: videoOutput
+                                                loops: MediaPlayer.Infinite
+                                                Component.onCompleted: play()
+                                            }
+                                        }
                                     }
                                 }
                                 Text { text: app.selected ? app.selected.title : "Выбери фон"; color: app.fg; font.family: "Noto Sans"; font.pixelSize: 18; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; Layout.fillWidth: true }
