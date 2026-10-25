@@ -61,7 +61,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux-packages
-          path: dist/*
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.tar.gz
           if-no-files-found: error
 
   windows:
@@ -136,10 +139,10 @@ jobs:
             exit 0
           fi
           cd release-assets
-          sha256sum * > SHA256SUMS
+          sha256sum *.deb *.rpm *.tar.gz *.exe *.zip > SHA256SUMS
           cd ..
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo 'Release already exists; refusing to overwrite it.'
             exit 1
           fi
-          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Wallpaper changer — $RELEASE_TAG" --notes-file RELEASE_NOTES.md release-assets/*
+          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Wallpaper changer — $RELEASE_TAG" --notes-file RELEASE_NOTES.md release-assets/*.deb release-assets/*.rpm release-assets/*.tar.gz release-assets/*.exe release-assets/*.zip release-assets/SHA256SUMS
