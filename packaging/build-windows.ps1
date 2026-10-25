@@ -28,8 +28,7 @@ if ($env:QT_ROOT_DIR) {
     Get-ChildItem "$env:QT_ROOT_DIR/../../Licenses" -File -ErrorAction SilentlyContinue | Copy-Item -Destination (Join-Path $Stage 'licenses') -Force
 }
 Copy-Item THIRD_PARTY_NOTICES.md (Join-Path $Stage 'licenses')
-Invoke-WebRequest 'https://www.gnu.org/licenses/lgpl-3.0.txt' -OutFile (Join-Path $Stage 'licenses/LGPL-3.0.txt')
-Invoke-WebRequest 'https://www.gnu.org/licenses/gpl-3.0.txt' -OutFile (Join-Path $Stage 'licenses/GPL-3.0.txt')
+Copy-Item 'packaging/licenses/*.txt' (Join-Path $Stage 'licenses')
 $PythonLicense = python -c 'import pathlib,sys; print(pathlib.Path(sys.base_prefix)/"LICENSE.txt")'
 if (Test-Path $PythonLicense) { Copy-Item $PythonLicense (Join-Path $Stage 'licenses/Python-LICENSE.txt') }
 $VSWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'

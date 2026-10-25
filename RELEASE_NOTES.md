@@ -15,8 +15,8 @@ Linux packages require system Qt 6.4+, Python 3.10+, FFmpeg and LZ4. Package man
 the declared dependencies. Fedora's optional proprietary codecs may require a fuller FFmpeg
 build for some input videos. Windows 10 1809+ x64 is supported by the packaged Qt version.
 
-Game resources, videos and third-party background templates are not included. Import a
-compatible template once before adding videos on a new installation; see the README.
+Game resources, videos and third-party background templates are not included. The app downloads
+the base template on first use; a compatible local template can also be selected in Settings.
 
 Installers and checksums are published only after both Linux and Windows build/test jobs pass.
 The version label records the intended Dota/event baseline, not a guarantee for future patches.
