@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 
 from .vpk import VPK, VPKError, safe_name, write_vpk
 from .runtime import steam_roots, process_options
@@ -220,7 +221,7 @@ def backup_path(game):
     if root.is_symlink():
         raise ValueError('Каталог резервных копий не должен быть ссылкой')
     root.mkdir(exist_ok=True)
-    return root / datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    return root / (datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '-' + uuid.uuid4().hex)
 
 
 def install(package, game):

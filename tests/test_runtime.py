@@ -10,9 +10,20 @@ from dota_background.locking import app_lock
 from dota_background.runtime import data_directory
 from dota_background.library import Library, write_json
 from dota_background import media
+from dota_background.core import backup_path
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_backup_names_do_not_collide_with_coarse_system_clock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch('dota_background.core.datetime.datetime') as clock:
+                clock.now.return_value.strftime.return_value = '20261025-091239-321095'
+                first = backup_path(Path(temporary))
+                first.mkdir()
+                second = backup_path(Path(temporary))
+                second.mkdir()
+                self.assertNotEqual(first, second)
+
     def test_qt_monitors_fallback_uses_physical_primary_screen(self):
         screens = '[{"name":"secondary","width":1920,"height":1080}, {"name":"primary","width":3840,"height":2160,"focused":true}]'
         with patch.dict(os.environ, {'WALLPAPER_CHANGER_SCREENS': screens}):
