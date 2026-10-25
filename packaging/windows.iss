@@ -62,26 +62,20 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  Value, Directory, Output, Part: String;
+  Value, Directory: String;
   Added: Cardinal;
-  Separator: Integer;
+  Position: Integer;
 begin
   if (CurUninstallStep = usPostUninstall) and
      RegQueryDWordValue(HKCU, 'Software\WallpaperChanger', 'AddedToPath', Added) and (Added = 1) then begin
     Directory := Lowercase(ExpandConstant('{app}'));
     RegQueryStringValue(HKCU, 'Environment', 'Path', Value);
-    Output := '';
-    while Value <> '' do begin
-      Separator := Pos(';', Value);
-      if Separator = 0 then Separator := Length(Value) + 1;
-      Part := Copy(Value, 1, Separator - 1);
-      Delete(Value, 1, Separator);
-      if Lowercase(Part) <> Directory then begin
-        if Output <> '' then Output := Output + ';';
-        Output := Output + Part;
-      end;
-    end;
-    RegWriteExpandStringValue(HKCU, 'Environment', 'Path', Output);
+    Position := Pos(';' + Directory + ';', ';' + Lowercase(Value) + ';');
+    if Position > 1 then
+      Delete(Value, Position - 1, Length(Directory) + 1)
+    else if Position = 1 then
+      Delete(Value, 1, Length(Directory) + 1);
+    RegWriteExpandStringValue(HKCU, 'Environment', 'Path', Value);
     RegDeleteValue(HKCU, 'Software\WallpaperChanger', 'AddedToPath');
   end;
 end;

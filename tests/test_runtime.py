@@ -9,9 +9,17 @@ from unittest.mock import patch
 from dota_background.locking import app_lock
 from dota_background.runtime import data_directory
 from dota_background.library import Library, write_json
+from dota_background import media
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_qt_monitors_fallback_uses_physical_primary_screen(self):
+        screens = '[{"name":"secondary","width":1920,"height":1080}, {"name":"primary","width":3840,"height":2160,"focused":true}]'
+        with patch.dict(os.environ, {'WALLPAPER_CHANGER_SCREENS': screens}):
+            with patch('dota_background.media.subprocess.run', side_effect=FileNotFoundError):
+                self.assertEqual(media.monitors()[0]['name'], 'primary')
+                self.assertEqual(media.monitors()[0]['width'], 3840)
+
     def test_storage_override_preserves_explicit_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             with patch.dict(os.environ, {'DOTA_BACKGROUND_STORAGE': temporary}):

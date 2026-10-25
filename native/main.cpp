@@ -15,6 +15,7 @@
 #include <QLocalSocket>
 #include <QCryptographicHash>
 #include <QDebug>
+#include <QScreen>
 #include <iostream>
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -44,6 +45,15 @@ static bool configureBackend(QProcess &process, const QStringList &arguments = {
     environment.insert("PATH", tools + QDir::listSeparator() + environment.value("PATH"));
     environment.insert("PYTHONUTF8", "1");
     environment.insert("PYTHONIOENCODING", "utf-8");
+    if (qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+        QJsonArray screens;
+        for (auto *screen : QGuiApplication::screens()) {
+            const QSize size = screen->size() * screen->devicePixelRatio();
+            screens.append(QJsonObject{{"name", screen->name()}, {"width", size.width()},
+                {"height", size.height()}, {"focused", screen == QGuiApplication::primaryScreen()}});
+        }
+        environment.insert("WALLPAPER_CHANGER_SCREENS", QString::fromUtf8(QJsonDocument(screens).toJson(QJsonDocument::Compact)));
+    }
 #ifdef Q_OS_WIN
     const QString frozen = app.filePath("_backend/wallpaper-backend.exe");
     process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) { args->flags |= CREATE_NO_WINDOW; });

@@ -1,6 +1,7 @@
 """Monitor detection, bounded WebM encoding, and still previews."""
 from pathlib import Path
 import json
+import os
 import shutil
 import subprocess
 
@@ -43,6 +44,16 @@ def monitors():
                               'focused': monitor.get('focused', False)})
             return sorted(found, key=lambda m: not m['focused'])
     except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
+        pass
+    try:
+        screens = json.loads(os.environ.get('WALLPAPER_CHANGER_SCREENS', '[]'))
+        found = []
+        for screen in screens:
+            width, height = valid_size((screen['width'], screen['height']))
+            found.append({'name': str(screen['name']), 'width': width, 'height': height,
+                          'focused': bool(screen.get('focused', False))})
+        return sorted(found, key=lambda m: not m['focused'])
+    except (ValueError, TypeError, KeyError):
         pass
     return []
 

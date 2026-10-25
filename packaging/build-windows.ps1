@@ -64,9 +64,13 @@ if ($LASTEXITCODE -ne 0) { throw 'Windows installer build failed' }
 # Exercise the installer and the installed program, not only the staging directory.
 $Installer = Get-ChildItem dist -Filter '*-setup.exe' | Select-Object -First 1
 $Destination = Join-Path $env:RUNNER_TEMP 'WallpaperChangerInstalled'
+$OriginalUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $Install = Start-Process -FilePath $Installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$Destination") -Wait -PassThru
 if ($Install.ExitCode -ne 0) { throw 'Silent install failed' }
+$InstalledPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (-not ((';' + $InstalledPath + ';').Contains(';' + $Destination + ';'))) { throw 'Installer did not register the terminal command' }
 $Installed = Start-Process -FilePath (Join-Path $Destination 'wallpaper-changer.exe') -ArgumentList '--self-test' -Wait -PassThru
 if ($Installed.ExitCode -ne 0) { throw 'Installed application self-test failed' }
 $Uninstall = Start-Process -FilePath (Join-Path $Destination 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
 if ($Uninstall.ExitCode -ne 0) { throw 'Silent uninstall failed' }
+if ([Environment]::GetEnvironmentVariable('Path', 'User') -cne $OriginalUserPath) { throw 'Uninstaller changed the original user PATH' }
