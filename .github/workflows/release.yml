@@ -68,15 +68,15 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
       - uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
           arch: win64_msvc2022_64
           modules: qtmultimedia
           cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Install FFmpeg
         run: choco install ffmpeg --version=7.1.1 --allow-downgrade -y --no-progress
       - name: Unit and integration tests
