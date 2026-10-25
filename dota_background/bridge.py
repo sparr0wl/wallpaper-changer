@@ -9,6 +9,8 @@ import traceback
 
 from . import core, media, mounts
 from .library import Fonts, Library, read_json, write_json
+from .locking import app_lock
+from .runtime import data_directory
 
 
 def palette():
@@ -67,82 +69,86 @@ def emit(data):
 
 
 def serve():
-    # One backend owns mutations; a second app cannot race install/font actions.
-    import fcntl
     import signal
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
     def terminate(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, terminate)
-    storage = Path(os.environ.get('DOTA_BACKGROUND_STORAGE', Path.home() / '.local/share/dota-background-changer'))
+    storage = data_directory()
     storage.mkdir(parents=True, exist_ok=True)
-    with (storage / '.app.lock').open('w') as lock:
+    try:
+        with app_lock(storage / '.app.lock'):
+            return serve_locked(storage)
+    except BlockingIOError:
+        emit({'type': 'error', 'message': 'Приложение уже открыто. Используйте существующее окно.'})
+        return 1
+
+
+def serve_locked(storage):
+    library = Library(storage)
+    emit({'type': 'progress', 'percent': 0, 'message': 'Загрузка библиотеки и превью…'})
+    try:
+        library.migrate()
+    except Exception as e:
+        emit({'type': 'notice', 'message': 'Не все старые фоны удалось импортировать: ' + str(e)})
+    emit({'type': 'state', 'state': snapshot(library)})
+    for line in sys.stdin:
+        request = {}
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            emit({'type': 'error', 'message': 'Приложение уже открыто. Используйте существующее окно.'})
-            return 1
-        library = Library(storage)
-        emit({'type': 'progress', 'percent': 0, 'message': 'Загрузка библиотеки и превью…'})
-        try:
-            library.migrate()
+            request = json.loads(line)
+            action = request.get('action')
+            message = ''
+            progress = lambda percent, text: emit({'type': 'progress', 'percent': percent, 'message': text})
+            if action == 'state':
+                pass
+            elif action == 'add':
+                progress(0, 'Добавление видео в библиотеку')
+                identifier = library.import_video(request['path'])
+                # User only chooses a video; convert, fix and apply automatically.
+                library.activate(identifier, request.get('size'), progress)
+                message = 'Фон установлен в штатную языковую папку. Перезапустите Dota 2. Параметр -language 123 не нужен.'
+            elif action == 'activate':
+                library.activate(request['id'], request.get('size'), progress)
+                message = 'Фон установлен. Перезапустите Dota 2.'
+            elif action == 'repair':
+                progress(10, 'Обновление фикса события из установленных файлов Dota 2')
+                result = library.repair_scene()
+                message = 'Фикс обновлён: ' + result['scene_fix']['event_scene'] + '. Проверьте фон после запуска игры.'
+            elif action == 'disable':
+                mounts.disable(library.game)
+                message = 'Фон отключён; прежний аудиоязык восстановлен. Старый параметр -language 123 больше не нужен.'
+            elif action == 'font':
+                if not isinstance(request.get('enabled'), bool):
+                    raise ValueError('Нужно логическое состояние шрифта')
+                Fonts(library.game, library.storage).toggle(request['name'], request['enabled'])
+                message = 'Шрифт ' + ('включён' if request['enabled'] else 'отключён') + '. Перезапустите Dota 2.'
+            elif action == 'settings':
+                if request.get('game'):
+                    library.game = core.game_directory(request['game'])
+                    library.settings['game'] = str(library.game)
+                if request.get('template'):
+                    core.load_template(request['template'])
+                    library.template = Path(request['template']).expanduser().resolve()
+                    library.settings['template'] = str(library.template)
+                if 'resolution' in request:
+                    library.settings['resolution'] = list(media.valid_size(request['resolution'])) if request['resolution'] else None
+                write_json(library.config_path, library.settings)
+                message = 'Настройки сохранены.'
+            elif action == 'rescan':
+                library.migrate()
+                message = 'Библиотека обновлена.'
+            else:
+                raise ValueError('Неизвестная команда')
+            emit({'type': 'state', 'state': snapshot(library), 'message': message, 'action': action})
         except Exception as e:
-            emit({'type': 'notice', 'message': 'Не все старые фоны удалось импортировать: ' + str(e)})
-        emit({'type': 'state', 'state': snapshot(library)})
-        for line in sys.stdin:
-            request = {}
+            traceback.print_exc(file=sys.stderr)
+            emit({'type': 'error', 'message': str(e), 'action': request.get('action')})
             try:
-                request = json.loads(line)
-                action = request.get('action')
-                message = ''
-                progress = lambda percent, text: emit({'type': 'progress', 'percent': percent, 'message': text})
-                if action == 'state':
-                    pass
-                elif action == 'add':
-                    progress(0, 'Добавление видео в библиотеку')
-                    identifier = library.import_video(request['path'])
-                    # User only chooses a video; convert, fix and apply automatically.
-                    library.activate(identifier, request.get('size'), progress)
-                    message = 'Фон установлен в штатную языковую папку. Перезапустите Dota 2. Параметр -language 123 не нужен.'
-                elif action == 'activate':
-                    library.activate(request['id'], request.get('size'), progress)
-                    message = 'Фон установлен. Перезапустите Dota 2.'
-                elif action == 'repair':
-                    progress(10, 'Обновление фикса события из установленных файлов Dota 2')
-                    result = library.repair_scene()
-                    message = 'Фикс обновлён: ' + result['scene_fix']['event_scene'] + '. Проверьте фон после запуска игры.'
-                elif action == 'disable':
-                    mounts.disable(library.game)
-                    message = 'Фон отключён; прежний аудиоязык восстановлен. Старый параметр -language 123 больше не нужен.'
-                elif action == 'font':
-                    if not isinstance(request.get('enabled'), bool):
-                        raise ValueError('Нужно логическое состояние шрифта')
-                    Fonts(library.game, library.storage).toggle(request['name'], request['enabled'])
-                    message = 'Шрифт ' + ('включён' if request['enabled'] else 'отключён') + '. Перезапустите Dota 2.'
-                elif action == 'settings':
-                    if request.get('game'):
-                        library.game = core.game_directory(request['game'])
-                        library.settings['game'] = str(library.game)
-                    if request.get('template'):
-                        core.load_template(request['template'])
-                        library.template = Path(request['template']).expanduser().resolve()
-                        library.settings['template'] = str(library.template)
-                    if 'resolution' in request:
-                        library.settings['resolution'] = list(media.valid_size(request['resolution'])) if request['resolution'] else None
-                    write_json(library.config_path, library.settings)
-                    message = 'Настройки сохранены.'
-                elif action == 'rescan':
-                    library.migrate()
-                    message = 'Библиотека обновлена.'
-                else:
-                    raise ValueError('Неизвестная команда')
-                emit({'type': 'state', 'state': snapshot(library), 'message': message, 'action': action})
-            except Exception as e:
-                traceback.print_exc(file=sys.stderr)
-                emit({'type': 'error', 'message': str(e), 'action': request.get('action')})
-                try:
-                    emit({'type': 'state', 'state': snapshot(library), 'action': request.get('action')})
-                except Exception:
-                    pass
+                emit({'type': 'state', 'state': snapshot(library), 'action': request.get('action')})
+            except Exception:
+                pass
     return 0
 
 

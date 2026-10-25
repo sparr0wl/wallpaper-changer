@@ -12,6 +12,7 @@ import uuid
 from . import core, media
 from . import mounts
 from .vpk import VPK
+from .runtime import data_directory
 
 
 def write_json(path, data):
@@ -45,14 +46,19 @@ def sha(path):
 
 class Library:
     def __init__(self, storage=None, game=None):
-        self.storage = Path(storage or Path.home() / '.local/share/dota-background-changer')
+        self.storage = Path(storage) if storage else data_directory()
         self.items_path = self.storage / 'library'
         self.items_path.mkdir(parents=True, exist_ok=True)
         self.config_path = self.storage / 'settings.json'
         self.settings = read_json(self.config_path, {})
         games = core.discover_games() if game is None and not self.settings.get('game') else []
         configured = game or self.settings.get('game') or (games[0] if games else None)
-        self.game = core.game_directory(configured) if configured else None
+        try:
+            self.game = core.game_directory(configured) if configured else None
+        except ValueError:
+            if game is not None:
+                raise
+            self.game = None
         self.template = Path(self.settings.get('template', self.storage / 'templates/local-base'))
 
     def item_path(self, identifier):
@@ -143,6 +149,13 @@ class Library:
         if self.game is None:
             raise ValueError('Укажите папку Dota 2 в настройках')
         core.ensure_game_closed()
+        if not self.template.exists():
+            if progress:
+                progress(0, 'Первый запуск: загрузка основы видеофона')
+            from .templates import download_template
+            self.template, _ = download_template(self.storage / 'templates/local-base')
+            self.settings['template'] = str(self.template)
+            write_json(self.config_path, self.settings)
         item_path = self.item_path(identifier)
         item = read_json(item_path / 'item.json')
         if item is None:

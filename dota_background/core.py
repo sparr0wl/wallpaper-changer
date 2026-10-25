@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 
 from .vpk import VPK, VPKError, safe_name, write_vpk
+from .runtime import steam_roots, process_options
 
 MARKER = '.dota-background.json'
 APP_ID = 'dota-background-changer-v1'
@@ -29,18 +30,7 @@ def game_directory(path):
 
 
 def discover_games():
-    home = Path.home()
-    roots = [home / '.local/share/Steam', home / '.steam/steam', home / 'Library/Application Support/Steam']
-    for env in ('PROGRAMFILES(X86)', 'PROGRAMFILES', 'ProgramFiles(x86)', 'ProgramFiles'):
-        if os.environ.get(env):
-            roots.append(Path(os.environ[env]) / 'Steam')
-    if os.name == 'nt':
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Valve\Steam') as key:
-                roots.append(Path(winreg.QueryValueEx(key, 'SteamPath')[0]))
-        except OSError:
-            pass
+    roots = steam_roots()
     libraries = set(roots)
     for root in roots:
         config = root / 'steamapps/libraryfolders.vdf'
@@ -69,7 +59,7 @@ def video_info(path):
     if not probe:
         raise ValueError('Для проверки видео нужен ffprobe из пакета FFmpeg')
     result = subprocess.run([probe, '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path)],
-                            capture_output=True, text=True, timeout=30)
+                            capture_output=True, text=True, timeout=30, **process_options())
     if result.returncode:
         raise ValueError('ffprobe не смог прочитать видео: ' + result.stderr[-500:])
     details = json.loads(result.stdout)
@@ -220,7 +210,7 @@ def ensure_game_closed():
                 continue
     elif os.name == 'nt':
         result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq dota2.exe', '/FO', 'CSV'],
-                                capture_output=True, text=True, timeout=15)
+                                capture_output=True, text=True, timeout=15, **process_options())
         if 'dota2.exe' in result.stdout.lower():
             raise ValueError('Закройте Dota 2 перед изменением фона')
 

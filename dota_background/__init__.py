@@ -1,2 +1,2 @@
-"""Dota Background Changer."""
-__version__ = '1.0.0'
+"""Wallpaper changer: native desktop UI and game-resource services."""
+__version__ = '7.41.0'

@@ -53,13 +53,7 @@ def main():
     args = parser.parse_args()
     try:
         if args.command in (None, 'gui'):
-            if sys.platform.startswith('linux'):
-                try:
-                    from .desktop import run
-                except ImportError:
-                    from .gui import run
-            else:
-                from .gui import run
+            from .desktop import run
             run()
         elif args.command == 'detect':
             print('\n'.join(map(str, core.discover_games())) or 'Dota 2 не найдена')

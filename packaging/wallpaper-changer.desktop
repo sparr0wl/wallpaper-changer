@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Wallpaper changer
+Comment=Video backgrounds and fonts for Dota 2
+Comment[ru]=Видеофоны и шрифты Dota 2
+Exec=wallpaper-changer
+Icon=wallpaper-changer
+Terminal=false
+Categories=Game;
+StartupNotify=true
+X-DotaStudio=true

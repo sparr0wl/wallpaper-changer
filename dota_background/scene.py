@@ -13,6 +13,20 @@ CUSTOM_BACKGROUND = 'panorama/layout/dashboard_background_last_match.vxml'
 
 
 def lz4(data, size=None):
+    if size is not None and not 0 < size <= 32 * 1024**2:
+        raise ValueError('Некорректный размер буфера Panorama')
+    # Windows builds bundle the lz4 wheel; Linux can also use its system library.
+    try:
+        import lz4.block
+    except ImportError:
+        pass
+    else:
+        if size is None:
+            return lz4.block.compress(data, store_size=False)
+        result = lz4.block.decompress(data, uncompressed_size=size)
+        if len(result) != size:
+            raise ValueError('Повреждён сжатый буфер Panorama')
+        return result
     library = ctypes.util.find_library('lz4')
     if not library:
         raise ValueError('Нужна системная библиотека liblz4 для актуального фикса меню')

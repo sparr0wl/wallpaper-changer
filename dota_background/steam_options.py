@@ -5,6 +5,7 @@ import json
 import re
 
 from .mounts import atomic
+from .runtime import steam_roots
 
 
 def launch_option_span(text):
@@ -44,7 +45,7 @@ def launch_option_span(text):
 
 
 def configs():
-    roots = [Path.home() / '.local/share/Steam/userdata', Path.home() / '.steam/steam/userdata']
+    roots = [root / 'userdata' for root in steam_roots()]
     return sorted({p.resolve() for root in roots for p in root.glob('*/config/localconfig.vdf')})
 
 

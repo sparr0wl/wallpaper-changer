@@ -5,6 +5,7 @@ import shutil
 import subprocess
 
 from .core import video_info
+from .runtime import process_options
 
 
 def probe(path):
@@ -15,7 +16,7 @@ def probe(path):
     if not path.is_file():
         raise ValueError('Видеофайл не найден')
     result = subprocess.run([executable, '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path)],
-                            capture_output=True, text=True, timeout=30)
+                            capture_output=True, text=True, timeout=30, **process_options())
     if result.returncode:
         raise ValueError('Не удалось прочитать видео: ' + result.stderr[-400:])
     info = json.loads(result.stdout)
@@ -77,7 +78,7 @@ def convert(source, destination, size, progress=None):
         # stderr goes to a bounded temporary file, avoiding pipe deadlocks.
         import tempfile
         with tempfile.TemporaryFile(mode='w+') as errors:
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors, text=True)
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors, text=True, **process_options())
             try:
                 for line in process.stdout:
                     if line.startswith('out_time_us=') and progress:
@@ -112,4 +113,4 @@ def thumbnail(source, destination):
     info = probe(source)
     subprocess.run([executable, '-v', 'error', '-nostdin', '-n', '-ss', str(min(1, info['duration'] / 3)),
                     '-i', str(source), '-frames:v', '1', '-vf', 'scale=640:360:force_original_aspect_ratio=increase,crop=640:360',
-                    '-threads', '1', str(destination)], capture_output=True, check=True, timeout=45)
+                    '-threads', '1', str(destination)], capture_output=True, check=True, timeout=45, **process_options())

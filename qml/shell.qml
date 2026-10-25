@@ -3,13 +3,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtMultimedia
-import Quickshell
-import Quickshell.Io
 
-ShellRoot {
+Item {
     id: app
-    property var data: ({items: [], fonts: [], palette: {}, active: "", resolution: [1920,1080]})
-    property var palette: data.palette || ({})
+    property var stateData: ({items: [], fonts: [], palette: {}, active: "", resolution: [1920,1080]})
+    property var palette: stateData.palette || ({})
     property color bg: palette.background || "#101114"
     property color surface: palette.surface || "#191b20"
     property color raised: palette.raised || "#22252b"
@@ -34,7 +32,7 @@ ShellRoot {
     onFontQueryChanged: syncFonts()
 
     function syncFonts() {
-        var desired = (data.fonts || []).filter(item => item.name.toLowerCase().indexOf(fontQuery) !== -1);
+        var desired = (stateData.fonts || []).filter(item => item.name.toLowerCase().indexOf(fontQuery) !== -1);
         for (var i = 0; i < desired.length; ++i) {
             var item = desired[i];
             if (i >= fontsModel.count || fontsModel.get(i).fontName !== item.name) {
@@ -52,7 +50,7 @@ ShellRoot {
     }
 
     function send(action, payload) {
-        if (busy || !backend.running) return;
+        if (busy) return;
         if (action === "state" && polling) return;
         var request = payload || {};
         request.action = action;
@@ -63,7 +61,7 @@ ShellRoot {
             percent = 0;
             message = "Выполняется…";
         }
-        backend.write(JSON.stringify(request) + "\n");
+        NativeBackend.send(JSON.stringify(request));
     }
     function select(item) {
         playing = false;
@@ -71,8 +69,8 @@ ShellRoot {
         selected = item;
     }
     function updateSelection() {
-        var items = data.items || [];
-        var wanted = selectedId || data.active;
+        var items = stateData.items || [];
+        var wanted = selectedId || stateData.active;
         var found = null;
         for (var i = 0; i < items.length; ++i) if (items[i].id === wanted) found = items[i];
         var next = found || (items.length ? items[0] : null);
@@ -81,10 +79,10 @@ ShellRoot {
     }
     function screenSize() {
         // Backend prefers the focused physical Hyprland output. QML is a fallback.
-        if (data.resolution_fixed) return null;
-        var screens = data.monitors || [];
+        if (stateData.resolution_fixed) return null;
+        var screens = stateData.monitors || [];
         if (screens.length) return null;
-        if (data.resolution && settingsFixed.checked) return data.resolution;
+        if (stateData.resolution && settingsFixed.checked) return stateData.resolution;
         var ratio = win.screen ? win.screen.devicePixelRatio : 1;
         if (!ratio || !isFinite(ratio)) ratio = 1;
         return [Math.round((win.screen ? win.screen.width : 1920) * ratio), Math.round((win.screen ? win.screen.height : 1080) * ratio)];
@@ -100,9 +98,9 @@ ShellRoot {
             }
             else if (event.type === "notice") { message = event.message; }
             else if (event.type === "state") {
-                if (JSON.stringify(data) !== JSON.stringify(event.state)) {
-                    data = event.state;
-                    if (JSON.stringify(libraryItems) !== JSON.stringify(data.items || [])) libraryItems = data.items || [];
+                if (JSON.stringify(stateData) !== JSON.stringify(event.state)) {
+                    stateData = event.state;
+                    if (JSON.stringify(libraryItems) !== JSON.stringify(stateData.items || [])) libraryItems = stateData.items || [];
                     syncFonts();
                     updateSelection();
                 }
@@ -115,20 +113,38 @@ ShellRoot {
         } catch (error) { failed = true; message = "Ошибка ответа приложения: " + error; busy = false; }
     }
 
-    Process {
-        id: backend
-        command: [Quickshell.env("DOTA_BACKGROUND_PYTHON") || "/usr/bin/python3", "-m", "dota_background.bridge"]
-        workingDirectory: Quickshell.env("DOTA_BACKGROUND_PROJECT") || Quickshell.shellDir
-        stdinEnabled: true
-        running: true
-        stdout: SplitParser { onRead: line => app.receive(line) }
-        stderr: SplitParser { onRead: line => { app.backendError = line; console.warn(line); } }
-        onExited: (code, status) => {
-            app.busy = false;
-            app.polling = false;
-            app.failed = true;
-            app.message = "Сервис приложения остановлен (" + code + "). Перезапустите окно. " + app.backendError;
-        }
+    Connections {
+        target: NativeBackend
+        function onEvent(line) { app.receive(line); }
+    }
+    Component.onCompleted: NativeBackend.start()
+    function testPolling() {
+        if (grid.count < 1 || fontsModel.count < 1) return false;
+        grid.forceLayout();
+        var card = grid.itemAtIndex(0);
+        var selection = selected;
+        send("state");
+        if (busy || !polling) return false;
+        receive(JSON.stringify({type: "state", action: "state", state: JSON.parse(JSON.stringify(stateData))}));
+        grid.forceLayout();
+        if (busy || polling || grid.itemAtIndex(0) !== card || selected !== selection) return false;
+        var refreshed = JSON.parse(JSON.stringify(stateData));
+        refreshed.fonts[0].enabled = !refreshed.fonts[0].enabled;
+        receive(JSON.stringify({type: "state", action: "state", state: refreshed}));
+        grid.forceLayout();
+        return grid.itemAtIndex(0) === card;
+    }
+    function testFonts() {
+        if (fontsModel.count <= 20) return false;
+        fontList.positionViewAtIndex(20, ListView.Center);
+        fontList.forceLayout();
+        var before = fontList.contentY;
+        var row = fontList.itemAtIndex(20);
+        var refreshed = JSON.parse(JSON.stringify(stateData));
+        refreshed.fonts[20].enabled = !refreshed.fonts[20].enabled;
+        receive(JSON.stringify({type: "state", state: refreshed}));
+        fontList.forceLayout();
+        return page === "fonts" && Math.abs(fontList.contentY - before) <= 0.5 && fontList.itemAtIndex(20) === row;
     }
     Timer {
         interval: 12000
@@ -141,30 +157,38 @@ ShellRoot {
         title: "Добавить видеофон"
         nameFilters: ["Видео (*.mp4 *.webm *.mkv *.mov *.m4v *.avi)", "Все файлы (*)"]
         onAccepted: {
-            var path = decodeURIComponent(String(selectedFile).replace(/^file:\/\//, ""));
+            var path = NativeBackend.localPath(String(selectedFile));
             app.send("add", {path: path, size: app.screenSize()});
         }
     }
     FolderDialog {
         id: chooseGame
         title: "Папка dota 2 beta или game"
-        onAccepted: app.send("settings", {game: decodeURIComponent(String(selectedFolder).replace(/^file:\/\//, ""))})
+        onAccepted: app.send("settings", {game: NativeBackend.localPath(String(selectedFolder))})
     }
     FolderDialog {
         id: chooseBase
         title: "Папка основы фона"
-        onAccepted: app.send("settings", {template: decodeURIComponent(String(selectedFolder).replace(/^file:\/\//, ""))})
+        onAccepted: app.send("settings", {template: NativeBackend.localPath(String(selectedFolder))})
     }
 
-    FloatingWindow {
+    ApplicationWindow {
         id: win
         title: "Wallpaper changer"
         visible: true
-        implicitWidth: 1240
-        implicitHeight: 820
-        minimumSize: Qt.size(1000, 680)
+        objectName: "mainWindow"
+        width: 1240
+        height: 820
+        minimumWidth: 1000
+        minimumHeight: 680
+        onClosing: close => {
+            if (app.busy) {
+                close.accepted = false;
+                app.message = "Дождитесь завершения операции перед закрытием.";
+            }
+        }
         color: app.bg
-        // A normal toplevel; no layers, anchors, bar integration, or desktop rules.
+        // Standard Qt window on Windows, Linux and Wayland.
         Item {
             id: canvas
             anchors.fill: parent
@@ -199,7 +223,7 @@ ShellRoot {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 44
                                 radius: 8
-                                color: app.page === modelData.key ? app.raised : navHover.hovered ? Qt.alpha(app.fg, 0.04) : "transparent"
+                                color: app.page === modelData.key ? app.raised : navHover.hovered ? Qt.rgba(app.fg.r, app.fg.g, app.fg.b, 0.04) : "transparent"
                                 border.color: app.page === modelData.key ? app.edge : "transparent"
                                 RowLayout {
                                     anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 10; spacing: 12
@@ -244,7 +268,7 @@ ShellRoot {
                     }
 
                     Rectangle {
-                        visible: app.page === "library" && !!app.data.game_installed && (!!app.data.scene_needs_update || !app.data.mount_ready || !!app.data.obsolete_launch_option)
+                        visible: app.page === "library" && !!app.stateData.game_installed && (!!app.stateData.scene_needs_update || !app.stateData.mount_ready || !!app.stateData.obsolete_launch_option)
                         Layout.fillWidth: true
                         implicitHeight: sceneBanner.implicitHeight + 24
                         color: app.raised; radius: 10; border.color: app.edge
@@ -253,7 +277,7 @@ ShellRoot {
                             anchors.fill: parent; anchors.margins: 12
                             ColumnLayout {
                                 Layout.fillWidth: true; spacing: 4
-                                Text { text: app.data.mount_ready ? "Нужно обновить подключение фона" : "Фон лежит в папке, которую игра не загружает"; color: app.fg; font.family: "Noto Sans"; font.pixelSize: 12; font.bold: true }
+                                Text { text: app.stateData.mount_ready ? "Нужно обновить подключение фона" : "Фон лежит в папке, которую игра не загружает"; color: app.fg; font.family: "Noto Sans"; font.pixelSize: 12; font.bold: true }
                                 Text { text: "Исправление обновит фикс и установит его в штатную языковую папку."; color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11 }
                             }
                             ActionButton { text: "Исправить"; ink: app.fg; fill: app.surface; outline: app.edge; enabled: !app.busy; onClicked: app.send("repair") }
@@ -269,7 +293,7 @@ ShellRoot {
                             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
                             RowLayout {
                                 Text { text: "КОЛЛЕКЦИЯ"; color: app.muted; font.family: "Noto Sans"; font.pixelSize: 10; font.letterSpacing: 1.4; Layout.fillWidth: true }
-                                Text { text: (app.data.items || []).length + " фонов"; color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11 }
+                                Text { text: (app.stateData.items || []).length + " фонов"; color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11 }
                             }
                             GridView {
                                 id: grid
@@ -292,7 +316,7 @@ ShellRoot {
                                             Image { width: parent.width; height: width * 0.5625; source: modelData.preview_url; fillMode: Image.PreserveAspectCrop; asynchronous: true; cache: true }
                                             Row {
                                                 width: parent.width; spacing: 6
-                                                Rectangle { visible: app.data.active === modelData.id; width: 6; height: 6; radius: 3; color: app.accent; anchors.verticalCenter: parent.verticalCenter }
+                                                Rectangle { visible: app.stateData.active === modelData.id; width: 6; height: 6; radius: 3; color: app.accent; anchors.verticalCenter: parent.verticalCenter }
                                                 Text { width: parent.width - 20; text: modelData.title; elide: Text.ElideRight; color: app.fg; font.family: "Noto Sans"; font.pixelSize: 12 }
                                             }
                                         }
@@ -301,7 +325,7 @@ ShellRoot {
                                     }
                                 }
                             }
-                            Text { visible: !(app.data.items || []).length; text: "Здесь будут твои видеофоны. Нажми +, чтобы добавить первый."; color: app.muted; font.family: "Noto Sans"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                            Text { visible: !(app.stateData.items || []).length; text: "Здесь будут твои видеофоны. Нажми +, чтобы добавить первый."; color: app.muted; font.family: "Noto Sans"; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                         }
                         Rectangle {
                             Layout.preferredWidth: 300
@@ -328,10 +352,10 @@ ShellRoot {
                                 }
                                 Text { text: app.selected ? app.selected.title : "Выбери фон"; color: app.fg; font.family: "Noto Sans"; font.pixelSize: 18; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                                 Text { text: app.selected ? app.selected.media.width + " × " + app.selected.media.height + "  ·  " + Number(app.selected.media.duration).toFixed(1) + " с" : ""; color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11 }
-                                Text { text: app.selected && app.data.active === app.selected.id ? "● Сейчас установлен" : "Готов к применению"; color: app.accent; font.family: "Noto Sans"; font.pixelSize: 11 }
+                                Text { text: app.selected && app.stateData.active === app.selected.id ? "● Сейчас установлен" : "Готов к применению"; color: app.accent; font.family: "Noto Sans"; font.pixelSize: 11 }
                                 ActionButton { Layout.fillWidth: true; text: app.playing ? "Остановить превью" : "Смотреть видео"; ink: app.fg; fill: app.raised; outline: app.edge; enabled: !!app.selected; onClicked: app.playing = !app.playing }
                                 Item { Layout.fillHeight: true }
-                                Text { text: "Автоматически под экран\nMP4 → WebM · без чёрных полос\n" + (app.data.scene_fix && app.data.scene_fix.event_name ? "Фикс: " + app.data.scene_fix.event_name : "Фикс текущего события включён"); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; lineHeight: 1.7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                                Text { text: "Автоматически под экран\nMP4 → WebM · без чёрных полос\n" + (app.stateData.scene_fix && app.stateData.scene_fix.event_name ? "Фикс: " + app.stateData.scene_fix.event_name : "Фикс текущего события включён"); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; lineHeight: 1.7; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                                 ActionButton { Layout.fillWidth: true; text: "Применить фон"; primary: true; ink: app.bg; fill: app.fg; outline: app.fg; enabled: !!app.selected && !app.busy; onClicked: app.send("activate", {id: app.selectedId, size: app.screenSize()}) }
                             }
                         }
@@ -402,12 +426,12 @@ ShellRoot {
                                     id: options; anchors.fill: parent; anchors.margins: 18; spacing: 12
                                     Text { text: "Экран и оформление"; color: app.fg; font.family: "Noto Sans"; font.pixelSize: 16; font.bold: true }
                                     Text { visible: !!app.palette.omarchy; text: "Тема Omarchy: " + (app.palette.name || ""); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                                    Text { text: "Видео растягивается до физического разрешения выбранного экрана.\nТекущее разрешение: " + (app.data.resolution || []).join(" × "); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                                    CheckBox { id: settingsFixed; text: "Использовать фиксированное разрешение"; checked: !!app.data.resolution_fixed; palette.windowText: app.fg; palette.text: app.fg }
+                                    Text { text: "Видео растягивается до физического разрешения выбранного экрана.\nТекущее разрешение: " + (app.stateData.resolution || []).join(" × "); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                                    CheckBox { id: settingsFixed; text: "Использовать фиксированное разрешение"; checked: !!app.stateData.resolution_fixed; palette.windowText: app.fg; palette.text: app.fg }
                                     RowLayout {
-                                        TextField { id: screenWidth; text: String((app.data.resolution || [1920,1080])[0]); color: app.fg; padding: 10; implicitHeight: 40; Layout.preferredWidth: 100; inputMethodHints: Qt.ImhDigitsOnly; background: Rectangle { color: app.raised; radius: 6; border.color: app.edge } }
+                                        TextField { id: screenWidth; text: String((app.stateData.resolution || [1920,1080])[0]); color: app.fg; padding: 10; implicitHeight: 40; Layout.preferredWidth: 100; inputMethodHints: Qt.ImhDigitsOnly; background: Rectangle { color: app.raised; radius: 6; border.color: app.edge } }
                                         Text { text: "×"; color: app.muted }
-                                        TextField { id: screenHeight; text: String((app.data.resolution || [1920,1080])[1]); color: app.fg; padding: 10; implicitHeight: 40; Layout.preferredWidth: 100; inputMethodHints: Qt.ImhDigitsOnly; background: Rectangle { color: app.raised; radius: 6; border.color: app.edge } }
+                                        TextField { id: screenHeight; text: String((app.stateData.resolution || [1920,1080])[1]); color: app.fg; padding: 10; implicitHeight: 40; Layout.preferredWidth: 100; inputMethodHints: Qt.ImhDigitsOnly; background: Rectangle { color: app.raised; radius: 6; border.color: app.edge } }
                                         ActionButton { text: "Сохранить"; ink: app.fg; fill: app.raised; outline: app.edge; enabled: !app.busy; onClicked: app.send("settings", {resolution: settingsFixed.checked ? [Number(screenWidth.text),Number(screenHeight.text)] : null}) }
                                     }
                                 }
@@ -419,8 +443,8 @@ ShellRoot {
                                     Text { text: "Игра и восстановление"; color: app.fg; font.family: "Noto Sans"; font.pixelSize: 16; font.bold: true }
                                     Text { text: "Дополнительные параметры запуска не нужны. Старый -language 123 удаляется при установке.\nИспользуется штатная папка аудиоязыка; язык текста сохраняется."; color: app.muted; font.family: "Noto Sans"; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                                     RowLayout {
-                                        ActionButton { text: "Обновить фикс события"; ink: app.fg; fill: app.raised; outline: app.edge; enabled: !app.busy && !!app.data.game_installed; onClicked: app.send("repair") }
-                                        ActionButton { text: "Отключить фон"; ink: app.fg; fill: app.raised; outline: app.edge; enabled: !app.busy && !!app.data.game_installed; onClicked: app.send("disable") }
+                                        ActionButton { text: "Обновить фикс события"; ink: app.fg; fill: app.raised; outline: app.edge; enabled: !app.busy && !!app.stateData.game_installed; onClicked: app.send("repair") }
+                                        ActionButton { text: "Отключить фон"; ink: app.fg; fill: app.raised; outline: app.edge; enabled: !app.busy && !!app.stateData.game_installed; onClicked: app.send("disable") }
                                         ActionButton { text: "Обновить библиотеку"; ink: app.fg; fill: app.raised; outline: app.edge; enabled: !app.busy; onClicked: app.send("rescan") }
                                     }
                                 }
@@ -434,10 +458,10 @@ ShellRoot {
                             }
                             ColumnLayout {
                                 visible: advancedToggle.expanded; Layout.fillWidth: true; spacing: 10
-                                Text { text: "Игра: " + (app.data.game || "не найдена"); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
-                                Text { text: "Основа: " + (app.data.template || "не найдена"); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
-                                Text { text: "Папка загрузки: " + (app.data.mount_folder || "пока не подключена") + "\nАудиоязык: " + ((app.data.language || {}).audio || "не определён"); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
-                                Text { text: app.data.scene_fix ? "Заменена ссылка на сцену:\n" + app.data.scene_fix.event_scene + "\nФикс собран из текущего dashboard.vxml_c. Проверяется запуском игры." : "Актуальный фикс ещё не установлен."; color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
+                                Text { text: "Игра: " + (app.stateData.game || "не найдена"); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
+                                Text { text: "Основа: " + (app.stateData.template || "не найдена"); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
+                                Text { text: "Папка загрузки: " + (app.stateData.mount_folder || "пока не подключена") + "\nАудиоязык: " + ((app.stateData.language || {}).audio || "не определён"); color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
+                                Text { text: app.stateData.scene_fix ? "Заменена ссылка на сцену:\n" + app.stateData.scene_fix.event_scene + "\nФикс собран из текущего dashboard.vxml_c. Проверяется запуском игры." : "Актуальный фикс ещё не установлен."; color: app.muted; font.family: "Noto Sans"; font.pixelSize: 11; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
                                 RowLayout {
                                     ActionButton { text: "Выбрать игру"; ink: app.fg; fill: app.surface; outline: app.edge; enabled: !app.busy; onClicked: chooseGame.open() }
                                     ActionButton { text: "Выбрать основу"; ink: app.fg; fill: app.surface; outline: app.edge; enabled: !app.busy; onClicked: chooseBase.open() }

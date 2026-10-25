@@ -3,14 +3,15 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dota-background-changer"
-version = "1.0.0"
-description = "Desktop WebM background packer and VPK browser for Dota 2"
+name = "wallpaper-changer"
+version = "7.41.0"
+description = "Cross-platform Dota 2 wallpapers and fonts with a native Qt interface"
 requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
 dota-background = "dota_background.__main__:main"
+wallpaper-changer-tools = "dota_background.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["dota_background*"]
